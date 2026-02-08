@@ -28,6 +28,20 @@ npm-debug.log.*
 *.sass.d.ts
 *.scss.d.ts
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*.py[cod]?
+*.so
+*.egg-info/
+*.egg
+.pytest_cache/
 server/__pycache__/
 .vscode/
 .github/
