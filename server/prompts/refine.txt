@@ -1,0 +1,5 @@
+Refine the previous answer if needed. Keep it concise.
+Round: {{ round_index }}
+Question: {{ question }}
+Previous answer: {{ prior_answer }}
+Context: {{ context }}

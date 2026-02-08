@@ -5,6 +5,7 @@ from datetime import datetime
 from flask_cors import CORS
 from config import config
 from models import db, User, Transaction, UserConfig
+from agent import MultiRoundAgent
 
 
 def create_app(config_name=None):
@@ -102,20 +103,20 @@ def register_routes(app):
     def create_user():
         """Create a new user"""
         data = request.get_json()
-        
+
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
+
         if not data.get('username') or not data.get('email'):
             return jsonify({'error': 'Username and email are required'}), 400
-        
+
         # Check if user already exists
         if User.query.filter_by(username=data['username']).first():
             return jsonify({'error': 'Username already exists'}), 409
-        
+
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already exists'}), 409
-        
+
         try:
             user = User(username=data['username'], email=data['email'])
             db.session.add(user)
@@ -208,19 +209,19 @@ def register_routes(app):
         """Get all transactions for a user"""
         print(f"[DEBUG] Fetching transactions for user_id={user_id}")
         user = User.query.get(user_id)
-        
+
         # If user doesn't exist, create them
         if not user:
             print(f"[DEBUG] User {user_id} not found, creating new user")
             username = request.args.get('username', f'user_{user_id}')
             email = request.args.get('email', f'user_{user_id}@example.com')
-            
+
             # Check if username or email already exists
             if User.query.filter_by(username=username).first():
                 username = f'{username}_{user_id}'
             if User.query.filter_by(email=email).first():
                 email = f'user_{user_id}_{int(__import__("time").time())}@example.com'
-            
+
             user = User(id=user_id, username=username, email=email)
             db.session.add(user)
             db.session.commit()
@@ -247,10 +248,10 @@ def register_routes(app):
     def delete_transaction(transaction_id):
         """Delete a transaction"""
         transaction = Transaction.query.get(transaction_id)
-        
+
         if not transaction:
             return jsonify({'error': 'Transaction not found'}), 404
-        
+
         try:
             db.session.delete(transaction)
             db.session.commit()
@@ -330,49 +331,15 @@ def register_routes(app):
         if not question:
             return jsonify({'error': 'Question is required'}), 400
 
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
+        if not os.getenv('OPENAI_API_KEY'):
             return jsonify({'error': 'OPENAI_API_KEY not set'}), 500
 
-        model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
-        system_prompt = (
-            'You are a concise budget advisor. Use the provided context to give actionable, safe, '
-            'non-judgmental spending and saving guidance. Keep responses under 8 bullet points.'
-        )
-
-        messages = [
-            {'role': 'system', 'content': system_prompt},
-            {'role': 'user', 'content': f"Context: {context}"},
-            {'role': 'user', 'content': question}
-        ]
-
         try:
-            resp = requests.post(
-                'https://api.openai.com/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer {api_key}',
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'model': model,
-                    'messages': messages,
-                    'temperature': 0.4,
-                    'max_tokens': 300
-                },
-                timeout=30
-            )
-            if not resp.ok:
-                print(f"[OPENAI] Error {resp.status_code}: {resp.text}")
-                return jsonify({
-                    'error': 'Upstream error',
-                    'status': resp.status_code,
-                    'details': resp.text
-                }), 502
-
-            payload = resp.json()
-            content = payload['choices'][0]['message']['content']
-            return jsonify({'answer': content}), 200
+            agent = MultiRoundAgent(max_rounds=3)
+            result = agent.run(question=question, context=context)
+            return jsonify({'answer': result.answer, 'steps': [s.__dict__ for s in result.steps]}), 200
         except Exception as e:
+            print(f"[ADVICE ERROR] {e}")
             return jsonify({'error': str(e)}), 500
 
 

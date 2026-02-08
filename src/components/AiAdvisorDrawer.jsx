@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 function buildContextSummary({ projectedIncome = 0, currentMonthIncomeToDate = 0, expensesByCategory = {}, targets = {} }) {
@@ -53,6 +53,8 @@ export default function AiAdvisorDrawer({
 }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+  const messagesRef = useRef(null)
 
   const context = useMemo(
     () => ({ projectedIncome, currentMonthIncomeToDate, expensesByCategory, targets }),
@@ -67,6 +69,14 @@ export default function AiAdvisorDrawer({
     }
   }, [open, messages.length])
 
+  useEffect(() => {
+    if (!messagesRef.current) return
+    requestAnimationFrame(() => {
+      if (!messagesRef.current) return
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight
+    })
+  }, [messages, isTyping])
+
   if (!open) return null
 
   async function handleSend() {
@@ -75,6 +85,7 @@ export default function AiAdvisorDrawer({
 
     setMessages(prev => [...prev, { role: 'user', content: text }])
     setInput('')
+    setIsTyping(true)
 
     try {
       const res = await fetch(`${API_BASE}/api/advice`, {
@@ -93,19 +104,21 @@ export default function AiAdvisorDrawer({
     } catch (err) {
       const fallback = localAdvisorResponse(context)
       setMessages(prev => [...prev, { role: 'assistant', content: `Network error. Showing local advice:\n${fallback}` }])
+    } finally {
+      setIsTyping(false)
     }
   }
 
   return (
     <div className="drawer-overlay" role="dialog" aria-modal="true">
-      <div className="drawer" style={{ width: '520px' }}>
+      <div className="drawer" style={{ width: '520px', display: 'flex', flexDirection: 'column' }}>
         <div className="drawer-header">
           <h3>Budget Advisor</h3>
           <button className="btn" onClick={onClose} aria-label="Close drawer">Close</button>
         </div>
 
-        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
+          <div ref={messagesRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
             {messages.map((m, idx) => (
               <div
                 key={`${m.role}-${idx}`}
@@ -126,9 +139,23 @@ export default function AiAdvisorDrawer({
                 )}
               </div>
             ))}
+            {isTyping && (
+              <div
+                style={{
+                  alignSelf: 'flex-start',
+                  background: '#f3f4f6',
+                  color: '#6b7280',
+                  padding: '8px 10px',
+                  borderRadius: '8px',
+                  maxWidth: '90%'
+                }}
+              >
+                Typing…
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
             <input
               type="text"
               value={input}
