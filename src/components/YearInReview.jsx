@@ -4,7 +4,8 @@ export default function YearInReview({
   transactions = [],
   year = new Date().getFullYear(),
   years = [],
-  onYearChange = () => {}
+  onYearChange = () => {},
+  onSelectMonth = () => {}
 }) {
   const formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
   const months = Array.from({ length: 12 }, (_, i) => i)
@@ -28,7 +29,8 @@ export default function YearInReview({
 
     return {
       label,
-      saved
+      saved,
+      monthIndex
     }
   })
 
@@ -42,19 +44,43 @@ export default function YearInReview({
           ))}
         </select>
       </div>
-      <div className="chart-list" style={{ marginTop: '8px' }}>
-        {rows.map((row, i) => (
-          <div className="chart-row" key={i}>
-            <div className="chart-meta">
-              <div className="chart-label">{row.label}</div>
-              <div
-                className="chart-value"
-                style={{ color: row.saved >= 0 ? '#22c55e' : '#ef4444' }}
-              >
-                {formatter.format(row.saved)}
-              </div>
+      <div
+        style={{
+          marginTop: '12px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
+          gap: '12px'
+        }}
+      >
+        {rows.map((row) => (
+          <button
+            key={row.monthIndex}
+            onClick={() => onSelectMonth(row.monthIndex)}
+            className="card"
+            style={{
+              padding: '12px',
+              textAlign: 'left',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              minHeight: '96px'
+            }}
+          >
+            <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 600 }}>
+              {row.label}
             </div>
-          </div>
+            <div
+              style={{
+                textAlign: 'center',
+                fontSize: '16px',
+                fontWeight: 600,
+                color: row.saved >= 0 ? '#22c55e' : '#ef4444'
+              }}
+            >
+              {formatter.format(row.saved)}
+            </div>
+          </button>
         ))}
       </div>
     </section>

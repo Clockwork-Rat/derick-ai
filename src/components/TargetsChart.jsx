@@ -6,10 +6,10 @@ export default function TargetsChart({ targets = {}, projectedIncome = 0, onEdit
   const needsSet = new Set(needsCategories)
   const wantsSet = new Set(wantsCategories)
   const savingsSet = new Set(savingsCategories)
-  const NEEDS_COLOR = '#3b82f6'
-  const WANTS_COLOR = '#ef4444'
-  const SAVINGS_COLOR = '#22c55e'
-  const DEFAULT_COLOR = '#94a3b8'
+  const NEEDS_COLOR = '#93c5fd'
+  const WANTS_COLOR = '#fca5a5'
+  const SAVINGS_COLOR = '#86efac'
+  const DEFAULT_COLOR = '#cbd5e1'
 
   const getCategoryColor = (cat) => {
     if (savingsSet.has(cat)) return SAVINGS_COLOR

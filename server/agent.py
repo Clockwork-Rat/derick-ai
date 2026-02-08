@@ -58,14 +58,98 @@ class MultiRoundAgent:
 		steps: List[AgentStep] = []
 		current_prompt = self._build_initial_prompt(question, context)
 		answer = ""
+		requested_info: List[str] = []
 
 		for i in range(self.max_rounds):
 			response = self.model_fn(current_prompt, context)
 			steps.append(AgentStep(round_index=i + 1, prompt=current_prompt, response=response))
 			answer = response
+
+			if i == 0:
+				requested_info = self._parse_requested_info(response)
+				requested_context = self._build_requested_context(requested_info, context)
+				context = {
+					**context,
+					'REQUESTED_INFO': requested_info,
+					**requested_context
+				}
+
 			current_prompt = self._build_refine_prompt(question, answer, context, i + 1)
 
 		return AgentResult(answer=answer, steps=steps)
+
+	def _parse_requested_info(self, response: str) -> List[str]:
+		if not response:
+			return []
+		parts = [p.strip().upper() for p in response.split(',')]
+		return [p for p in parts if p]
+
+	def _build_requested_context(self, requested_info: List[str], context: Dict[str, Any]) -> Dict[str, Any]:
+		requested = {}
+		if not requested_info:
+			return requested
+
+		metrics = self._derive_metrics(context)
+		for key in requested_info:
+			if key in metrics:
+				requested[key] = metrics[key]
+		return requested
+
+	def _derive_metrics(self, context: Dict[str, Any]) -> Dict[str, Any]:
+		metrics: Dict[str, Any] = {}
+		current_income = context.get('currentMonthIncomeToDate')
+		projected_income = context.get('projectedIncome')
+		expenses_by_category = context.get('expensesByCategory') or {}
+		transactions = context.get('transactions') or []
+
+		total_expenses_this_month = sum(expenses_by_category.values()) if isinstance(expenses_by_category, dict) else None
+		if current_income is not None:
+			metrics['CURRENTMONTHINCOME'] = current_income
+		if projected_income is not None:
+			metrics['PROJECTEDINCOME'] = projected_income
+		if total_expenses_this_month is not None:
+			metrics['EXPENSESTHISMONTH'] = total_expenses_this_month
+		if current_income is not None and total_expenses_this_month is not None:
+			metrics['SAVINGSTHISMONTH'] = current_income - total_expenses_this_month
+
+		ytd_income = context.get('ytdIncome')
+		ytd_expenses = context.get('ytdExpenses')
+		if ytd_income is not None:
+			metrics['YTDINCOME'] = ytd_income
+		if ytd_expenses is not None:
+			metrics['YTDEXPENSES'] = ytd_expenses
+
+		if (ytd_income is None or ytd_expenses is None) and isinstance(transactions, list) and transactions:
+			from datetime import datetime
+			now_year = datetime.utcnow().year
+			ytd_income_calc = 0
+			ytd_expenses_calc = 0
+			for t in transactions:
+				try:
+					date_val = datetime.fromisoformat(t.get('date')) if isinstance(t, dict) else None
+				except Exception:
+					date_val = None
+				if not date_val or date_val.year != now_year:
+					continue
+				amount = t.get('amount', 0) if isinstance(t, dict) else 0
+				if t.get('transaction_type') == 'income':
+					ytd_income_calc += amount
+				elif t.get('transaction_type') == 'expense':
+					ytd_expenses_calc += amount
+			if ytd_income is None:
+				metrics['YTDINCOME'] = ytd_income_calc
+			if ytd_expenses is None:
+				metrics['YTDEXPENSES'] = ytd_expenses_calc
+
+		# Optional database context passthrough
+		if 'db_users' in context:
+			metrics['DB_USERS'] = context['db_users']
+		if 'db_transactions' in context:
+			metrics['DB_TRANSACTIONS'] = context['db_transactions']
+		if 'db_user_configs' in context:
+			metrics['DB_USER_CONFIGS'] = context['db_user_configs']
+
+		return metrics
 
 	def _build_initial_prompt(self, question: str, context: Dict[str, Any]) -> str:
 		return self._render_template(

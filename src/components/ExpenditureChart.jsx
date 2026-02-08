@@ -18,9 +18,9 @@ export default function ExpenditureChart({ data = [], onEditCategories = () => {
   const needsSet = new Set(needsCategories)
   const wantsSet = new Set(wantsCategories)
   const savingsSet = new Set(savingsCategories)
-  const NEEDS_COLOR = '#3b82f6'
-  const WANTS_COLOR = '#ef4444'
-  const SAVINGS_COLOR = '#22c55e'
+  const NEEDS_COLOR = '#93c5fd'
+  const WANTS_COLOR = '#fca5a5'
+  const SAVINGS_COLOR = '#86efac'
 
   const getCategoryColor = (cat) => {
     if (cat === 'Saved') return SAVINGS_COLOR

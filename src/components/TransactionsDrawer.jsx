@@ -6,7 +6,14 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
 const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Bonus', 'Interest', 'Dividends', 'Other']
 const DEFAULT_EXPENSE_CATEGORIES = ['Housing', 'Food', 'Utilities', 'Transport', 'Entertainment', 'Healthcare', 'Other']
 
-export default function TransactionsDrawer({ open = false, onClose = () => {}, onSubmit = () => {}, userId = null, expenseCategories = DEFAULT_EXPENSE_CATEGORIES }) {
+export default function TransactionsDrawer({
+  open = false,
+  onClose = () => {},
+  onSubmit = () => {},
+  userId = null,
+  expenseCategories = DEFAULT_EXPENSE_CATEGORIES,
+  savingsCategories = []
+}) {
   const [transactionType, setTransactionType] = useState('expense')
   const [category, setCategory] = useState('')
   const [amount, setAmount] = useState('')
@@ -27,9 +34,12 @@ export default function TransactionsDrawer({ open = false, onClose = () => {}, o
   }, [open])
 
   useEffect(() => {
-    const list = expenseCategories.length ? expenseCategories : DEFAULT_EXPENSE_CATEGORIES
-    setCategory(transactionType === 'income' ? INCOME_CATEGORIES[0] : list[0])
-  }, [transactionType])
+    const expenseList = expenseCategories.length ? expenseCategories : DEFAULT_EXPENSE_CATEGORIES
+    const savingsList = savingsCategories.length ? savingsCategories : ['Savings']
+    if (transactionType === 'income') setCategory(INCOME_CATEGORIES[0])
+    else if (transactionType === 'savings') setCategory(savingsList[0])
+    else setCategory(expenseList[0])
+  }, [transactionType, expenseCategories, savingsCategories])
 
   if (!open) return null
 
@@ -42,7 +52,7 @@ export default function TransactionsDrawer({ open = false, onClose = () => {}, o
       user_id: userId,
       description,
       amount: parsed,
-      transaction_type: transactionType === 'income' ? 'income' : 'expense',
+      transaction_type: transactionType === 'expense' ? 'expense' : 'income',
       category,
       date
     }
@@ -77,7 +87,9 @@ export default function TransactionsDrawer({ open = false, onClose = () => {}, o
 
   const categories = transactionType === 'income'
     ? INCOME_CATEGORIES
-    : (expenseCategories.length ? expenseCategories : DEFAULT_EXPENSE_CATEGORIES)
+    : transactionType === 'savings'
+      ? (savingsCategories.length ? savingsCategories : ['Savings'])
+      : (expenseCategories.length ? expenseCategories : DEFAULT_EXPENSE_CATEGORIES)
 
   return (
     <div className="drawer-overlay" role="dialog" aria-modal="true">
@@ -97,6 +109,7 @@ export default function TransactionsDrawer({ open = false, onClose = () => {}, o
             <select value={transactionType} onChange={e => setTransactionType(e.target.value)}>
               <option value="income">Income</option>
               <option value="expense">Expense</option>
+              <option value="savings">Savings</option>
             </select>
           </label>
 

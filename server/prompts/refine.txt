@@ -1,5 +1,4 @@
-Refine the previous answer if needed. Keep it concise.
+Answer the question using the context provided. If you have insufficient information, state that you have insufficient information.
 Round: {{ round_index }}
 Question: {{ question }}
-Previous answer: {{ prior_answer }}
 Context: {{ context }}

@@ -26,7 +26,16 @@ export default function App() {
   const [categoriesDrawerOpen, setCategoriesDrawerOpen] = useState(false)
   const [advisorDrawerOpen, setAdvisorDrawerOpen] = useState(false)
   const [projectedIncomeDrawerOpen, setProjectedIncomeDrawerOpen] = useState(false)
-  const [selectedUserId, setSelectedUserId] = useState(1)
+  const [selectedUserId, setSelectedUserId] = useState(() => {
+    const stored = localStorage.getItem('selectedUserId')
+    return stored ? Number(stored) : 1
+  })
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState('')
+  const [currentUsername, setCurrentUsername] = useState(() => {
+    return localStorage.getItem('currentUsername') || 'User'
+  })
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [transactions, setTransactions] = useState([])
   const [txLoading, setTxLoading] = useState(false)
@@ -54,6 +63,8 @@ export default function App() {
 
   useEffect(() => {
     async function ensureConfiguredUser() {
+      const storedUserId = localStorage.getItem('selectedUserId')
+      if (storedUserId) return
       const cfgUser = appConfig && appConfig.user
       if (!cfgUser) return
 
@@ -64,6 +75,7 @@ export default function App() {
           const match = users.find(u => u.username === cfgUser.username || u.email === cfgUser.email)
           if (match) {
             setSelectedUserId(match.id)
+            setCurrentUsername(match.username || 'User')
             return
           }
         }
@@ -76,7 +88,10 @@ export default function App() {
         })
         if (createRes.ok) {
           const created = await createRes.json()
-          if (created && created.id) setSelectedUserId(created.id)
+          if (created && created.id) {
+            setSelectedUserId(created.id)
+            setCurrentUsername(created.username || 'User')
+          }
         }
       } catch (err) {
         console.error('Error ensuring configured user:', err)
@@ -85,6 +100,70 @@ export default function App() {
 
     ensureConfiguredUser()
   }, [])
+
+  useEffect(() => {
+    if (selectedUserId) {
+      localStorage.setItem('selectedUserId', String(selectedUserId))
+    }
+    if (currentUsername) {
+      localStorage.setItem('currentUsername', currentUsername)
+    }
+  }, [selectedUserId, currentUsername])
+
+  async function handleLogin() {
+    const username = loginUsername.trim()
+    if (!username) return
+    setLoginLoading(true)
+    setLoginError('')
+
+    try {
+      const res = await fetch(`${API_BASE}/api/users`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const users = await res.json()
+      const match = users.find(u => u.username === username)
+      if (match) {
+        setSelectedUserId(match.id)
+        setCurrentUsername(match.username || 'User')
+        setActivePage('overview')
+        return
+      }
+
+      const email = `${username}_${Date.now()}@example.com`
+      const createRes = await fetch(`${API_BASE}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email })
+      })
+      if (!createRes.ok) throw new Error(`HTTP ${createRes.status}`)
+      const created = await createRes.json()
+      if (created && created.id) {
+        setSelectedUserId(created.id)
+        setCurrentUsername(created.username || 'User')
+        setActivePage('overview')
+      }
+    } catch (err) {
+      setLoginError('Unable to sign in right now.')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    async function loadCurrentUser() {
+      if (!selectedUserId) return
+      try {
+        const res = await fetch(`${API_BASE}/api/users`)
+        if (!res.ok) return
+        const users = await res.json()
+        const match = users.find(u => u.id === selectedUserId)
+        if (match?.username) setCurrentUsername(match.username)
+      } catch (err) {
+        console.error('Failed to load current user:', err)
+      }
+    }
+
+    loadCurrentUser()
+  }, [selectedUserId])
 
   useEffect(() => {
     async function loadCategories() {
@@ -200,7 +279,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <Header/>
+      <Header
+        currentUsername={currentUsername}
+        onOpenLogin={() => setActivePage('login')}
+      />
       <main>
         <nav style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
           <button
@@ -217,7 +299,29 @@ export default function App() {
           </button>
         </nav>
 
-        {activePage === 'overview' ? (
+        {activePage === 'login' ? (
+          <section className="card" style={{ maxWidth: '520px' }}>
+            <h2>Sign in</h2>
+            <p className="small">Enter your username to continue.</p>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <input
+                type="text"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                placeholder="Username"
+                aria-label="Username"
+                style={{ flex: 1 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleLogin()
+                }}
+              />
+              <button className="btn btn-primary" onClick={handleLogin} disabled={loginLoading || !loginUsername.trim()}>
+                {loginLoading ? 'Signing in…' : 'Login'}
+              </button>
+            </div>
+            {loginError ? <div className="small" style={{ color: '#ef4444', marginTop: '8px' }}>{loginError}</div> : null}
+          </section>
+        ) : activePage === 'overview' ? (
           <>
         <Dashboard
           topExpenses={topExpenses}
@@ -364,11 +468,22 @@ export default function App() {
             year={reviewYear}
             years={reviewYears}
             onYearChange={setReviewYear}
+            onSelectMonth={(monthIndex) => {
+              updateMonthYear(monthIndex, reviewYear)
+              setActivePage('overview')
+            }}
           />
         )}
 
       </main>
-      <TransactionsDrawer open={transactionsDrawerOpen} onClose={() => setTransactionsDrawerOpen(false)} onSubmit={handleAddTransaction} userId={selectedUserId} expenseCategories={EXPENSE_CATS} />
+      <TransactionsDrawer
+        open={transactionsDrawerOpen}
+        onClose={() => setTransactionsDrawerOpen(false)}
+        onSubmit={handleAddTransaction}
+        userId={selectedUserId}
+        expenseCategories={EXPENSE_CATS}
+        savingsCategories={savingsCategories}
+      />
       <ViewTransactionsDrawer
         open={viewTransactionsOpen}
         onClose={() => setViewTransactionsOpen(false)}
