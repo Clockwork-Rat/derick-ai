@@ -12,6 +12,7 @@ import TargetsDrawer from './components/TargetsDrawer'
 import ProjectedIncomeDrawer from './components/ProjectedIncomeDrawer'
 import CategoriesDrawer from './components/CategoriesDrawer'
 import AiAdvisorDrawer from './components/AiAdvisorDrawer'
+import YearInReview from './components/YearInReview'
 import appConfig from '../config.json'
 
 // backend base URL (Vite env var: VITE_API_BASE). Defaults to localhost:5000
@@ -48,6 +49,8 @@ export default function App() {
   const [wantsCategories, setWantsCategories] = useState(['Transport', 'Entertainment', 'Other'])
   const [savingsCategories, setSavingsCategories] = useState([])
   const [simpleView, setSimpleView] = useState(false)
+  const [activePage, setActivePage] = useState('overview')
+  const [reviewYear, setReviewYear] = useState(new Date().getFullYear())
 
   useEffect(() => {
     async function ensureConfiguredUser() {
@@ -176,6 +179,17 @@ export default function App() {
 
   const selectedYear = selectedMonth.getFullYear()
   const selectedMonthIndex = selectedMonth.getMonth()
+  const currentYear = new Date().getFullYear()
+  const reviewYears = Array.from(new Set([
+    currentYear,
+    ...transactions.map((t) => new Date(t.date).getFullYear()).filter((y) => Number.isFinite(y))
+  ])).sort((a, b) => b - a)
+
+  useEffect(() => {
+    if (!reviewYears.includes(reviewYear) && reviewYears.length > 0) {
+      setReviewYear(reviewYears[0])
+    }
+  }, [reviewYears, reviewYear])
 
   function updateMonthYear(monthIndex, year) {
     const next = new Date(selectedMonth)
@@ -188,6 +202,23 @@ export default function App() {
     <div className="app">
       <Header/>
       <main>
+        <nav style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <button
+            className={`btn ${activePage === 'overview' ? 'btn-primary' : ''}`}
+            onClick={() => setActivePage('overview')}
+          >
+            Overview
+          </button>
+          <button
+            className={`btn ${activePage === 'year' ? 'btn-primary' : ''}`}
+            onClick={() => setActivePage('year')}
+          >
+            Year Breakdown
+          </button>
+        </nav>
+
+        {activePage === 'overview' ? (
+          <>
         <Dashboard
           topExpenses={topExpenses}
           topTransactions={topTransactions}
@@ -197,24 +228,8 @@ export default function App() {
           onChangeMonth={(monthIndex) => updateMonthYear(monthIndex, selectedYear)}
           onChangeYear={(year) => updateMonthYear(selectedMonthIndex, year)}
         />
-        
-        {/* View toggle */}
-        <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
-          <button 
-            className={`btn ${!simpleView ? 'btn-primary' : ''}`}
-            onClick={() => setSimpleView(false)}
-          >
-            Detailed View
-          </button>
-          <button 
-            className={`btn ${simpleView ? 'btn-primary' : ''}`}
-            onClick={() => setSimpleView(true)}
-          >
-            Simple View
-          </button>
-        </div>
 
-        <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: 16}}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
           <MonthlyIncome
             month={selectedMonth}
             amount={monthlyIncome}
@@ -223,8 +238,25 @@ export default function App() {
           />
         </div>
 
-        {/* Actual vs Target charts side by side */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+        <section className="card" style={{ padding: '16px' }}>
+          {/* View toggle */}
+          <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
+            <button
+              className={`btn ${!simpleView ? 'btn-primary' : ''}`}
+              onClick={() => setSimpleView(false)}
+            >
+              Detailed View
+            </button>
+            <button
+              className={`btn ${simpleView ? 'btn-primary' : ''}`}
+              onClick={() => setSimpleView(true)}
+            >
+              Simple View
+            </button>
+          </div>
+
+          {/* Actual vs Target charts side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           {simpleView ? (
             <SimpleBudgetChart
               income={monthlyIncome}
@@ -234,8 +266,26 @@ export default function App() {
               savingsCategories={savingsCategories}
             />
           ) : (
-            <ExpenditureChart onEditCategories={() => setCategoriesDrawerOpen(true)} data={(() => {
-              const palette = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#f97316', '#06b6d4']
+            <ExpenditureChart
+              onEditCategories={() => setCategoriesDrawerOpen(true)}
+              needsCategories={needsCategories}
+              wantsCategories={wantsCategories}
+              savingsCategories={savingsCategories}
+              data={(() => {
+              const needsSet = new Set(needsCategories)
+              const wantsSet = new Set(wantsCategories)
+              const savingsSet = new Set(savingsCategories)
+              const NEEDS_COLOR = '#3b82f6'
+              const WANTS_COLOR = '#ef4444'
+              const SAVINGS_COLOR = '#22c55e'
+              const DEFAULT_COLOR = '#94a3b8'
+
+              const getCategoryColor = (cat) => {
+                if (savingsSet.has(cat)) return SAVINGS_COLOR
+                if (needsSet.has(cat)) return NEEDS_COLOR
+                if (wantsSet.has(cat)) return WANTS_COLOR
+                return DEFAULT_COLOR
+              }
 
               // total expenses and saved amount
               const totalExpenses = Object.values(expensesByCategory).reduce((s, a) => s + a, 0)
@@ -243,23 +293,24 @@ export default function App() {
 
               // build chart data with percentages based on income
               const divisor = monthlyIncome > 0 ? monthlyIncome : 1
-              const result = EXPENSE_CATS.map((cat, i) => ({
+              const result = EXPENSE_CATS.map((cat) => ({
                 label: cat,
                 amount: expensesByCategory[cat],
                 percentage: ((expensesByCategory[cat] / divisor) * 100).toFixed(1),
-                color: palette[i % palette.length]
+                color: getCategoryColor(cat)
               }))
-              
+
               // add saved row
               result.push({
                 label: 'Saved',
                 amount: saved,
                 percentage: ((saved / divisor) * 100).toFixed(1),
-                color: '#22c55e'
+                color: SAVINGS_COLOR
               })
 
               return result
-            })()} />
+            })()}
+            />
           )}
 
           {simpleView ? (
@@ -272,42 +323,60 @@ export default function App() {
               onEditClick={() => setTargetsDrawerOpen(true)}
             />
           ) : (
-            <TargetsChart targets={targets} projectedIncome={projectedIncome} categories={EXPENSE_CATS} onEditClick={() => setTargetsDrawerOpen(true)} />
+            <TargetsChart
+              targets={targets}
+              projectedIncome={projectedIncome}
+              categories={EXPENSE_CATS}
+              needsCategories={needsCategories}
+              wantsCategories={wantsCategories}
+              savingsCategories={savingsCategories}
+              onEditClick={() => setTargetsDrawerOpen(true)}
+            />
           )}
-        </div>
+          </div>
+        </section>
 
-        <button 
-          className="btn btn-primary" 
+        <button
+          className="btn btn-primary"
           style={{marginTop: 16, marginRight: 8}}
           onClick={() => setTransactionsDrawerOpen(true)}
         >
           Add Transaction
         </button>
-        <button 
-          className="btn" 
+        <button
+          className="btn"
           style={{marginTop: 16}}
           onClick={() => setViewTransactionsOpen(true)}
         >
           View Transactions
         </button>
-        <button 
-          className="btn" 
+        <button
+          className="btn"
           style={{marginTop: 16, marginLeft: 8}}
           onClick={() => setAdvisorDrawerOpen(true)}
         >
           Ask Budget Advisor
         </button>
+          </>
+        ) : (
+          <YearInReview
+            transactions={transactions}
+            year={reviewYear}
+            years={reviewYears}
+            onYearChange={setReviewYear}
+          />
+        )}
 
       </main>
       <TransactionsDrawer open={transactionsDrawerOpen} onClose={() => setTransactionsDrawerOpen(false)} onSubmit={handleAddTransaction} userId={selectedUserId} expenseCategories={EXPENSE_CATS} />
-      <ViewTransactionsDrawer 
-        open={viewTransactionsOpen} 
-        onClose={() => setViewTransactionsOpen(false)} 
+      <ViewTransactionsDrawer
+        open={viewTransactionsOpen}
+        onClose={() => setViewTransactionsOpen(false)}
         userId={selectedUserId}
         month={selectedMonth}
         onDelete={handleDeleteTransaction}
       />
-      <TargetsDrawer 
+      <TargetsDrawer
         open={targetsDrawerOpen}
         onClose={() => setTargetsDrawerOpen(false)}
         targets={targets}

@@ -12,8 +12,8 @@ export default function SimpleBudgetChart({ income = 0, expenses = {}, needsCate
   const savings = Math.max(0, income - total_expenses)
 
   const data = [
-    { label: 'Needs', amount: expenses_needed, percentage: income > 0 ? ((expenses_needed / income) * 100).toFixed(1) : 0, color: '#ef4444' },
-    { label: 'Wants', amount: expenses_wants, percentage: income > 0 ? ((expenses_wants / income) * 100).toFixed(1) : 0, color: '#f59e0b' },
+    { label: 'Needs', amount: expenses_needed, percentage: income > 0 ? ((expenses_needed / income) * 100).toFixed(1) : 0, color: '#3b82f6' },
+    { label: 'Wants', amount: expenses_wants, percentage: income > 0 ? ((expenses_wants / income) * 100).toFixed(1) : 0, color: '#ef4444' },
     { label: 'Savings', amount: expenses_savings + savings, percentage: income > 0 ? (((expenses_savings + savings) / income) * 100).toFixed(1) : 0, color: '#22c55e' }
   ]
 
@@ -30,9 +30,9 @@ export default function SimpleBudgetChart({ income = 0, expenses = {}, needsCate
               </div>
             </div>
             <div className="chart-bar-wrap">
-              <div 
-                className="chart-bar" 
-                style={{ width: `${d.percentage}%`, background: d.color }} 
+              <div
+                className="chart-bar"
+                style={{ width: `${d.percentage}%`, background: d.color }}
               />
               <div className="chart-pct"></div>
             </div>

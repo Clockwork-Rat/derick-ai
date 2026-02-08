@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function ExpenditureChart({ data = [], onEditCategories = () => {} }) {
+export default function ExpenditureChart({ data = [], onEditCategories = () => {}, needsCategories = [], wantsCategories = [], savingsCategories = [] }) {
   if (!Array.isArray(data) || data.length === 0) {
     return (
       <div className="card">
@@ -15,6 +15,44 @@ export default function ExpenditureChart({ data = [], onEditCategories = () => {
 
   const total = data.reduce((s, d) => s + (d.amount || 0), 0)
   const max = Math.max(...data.map(d => d.amount || 0))
+  const needsSet = new Set(needsCategories)
+  const wantsSet = new Set(wantsCategories)
+  const savingsSet = new Set(savingsCategories)
+  const NEEDS_COLOR = '#3b82f6'
+  const WANTS_COLOR = '#ef4444'
+  const SAVINGS_COLOR = '#22c55e'
+
+  const getCategoryColor = (cat) => {
+    if (cat === 'Saved') return SAVINGS_COLOR
+    if (savingsSet.has(cat)) return SAVINGS_COLOR
+    if (needsSet.has(cat)) return NEEDS_COLOR
+    if (wantsSet.has(cat)) return WANTS_COLOR
+    return null
+  }
+
+  const baseData = data.filter((d) => d.label !== 'Saved')
+  const savedRow = data.find((d) => d.label === 'Saved')
+  const dataByLabel = new Map(baseData.map((d) => [d.label, d]))
+  const orderedLabels = []
+  const used = new Set()
+
+  const pushIfAvailable = (label) => {
+    if (!dataByLabel.has(label) || used.has(label)) return
+    orderedLabels.push(label)
+    used.add(label)
+  }
+
+  const wantsWithoutOther = wantsCategories.filter((cat) => cat !== 'Other')
+  const wantsOrdered = [...wantsWithoutOther]
+  if (wantsCategories.includes('Other') || dataByLabel.has('Other')) wantsOrdered.push('Other')
+
+  needsCategories.forEach(pushIfAvailable)
+  wantsOrdered.forEach(pushIfAvailable)
+  savingsCategories.forEach(pushIfAvailable)
+  baseData.forEach((d) => pushIfAvailable(d.label))
+
+  const orderedData = orderedLabels.map((label) => dataByLabel.get(label)).filter(Boolean)
+  if (savedRow) orderedData.push(savedRow)
 
   return (
     <section className="card expenditure-chart">
@@ -23,9 +61,11 @@ export default function ExpenditureChart({ data = [], onEditCategories = () => {
         <button className="btn" onClick={onEditCategories}>Edit Categories</button>
       </div>
       <div className="chart-list">
-        {data.map((d, i) => {
+        {orderedData.map((d, i) => {
           const pct = total ? ((d.amount / total) * 100).toFixed(1) : 0
           const barWidth = max ? Math.round((d.amount / max) * 100) : 0
+          const mappedColor = getCategoryColor(d.label)
+          const barColor = mappedColor || d.color || 'var(--accent)'
           return (
             <div className="chart-row" key={i}>
               <div className="chart-meta">
@@ -33,7 +73,7 @@ export default function ExpenditureChart({ data = [], onEditCategories = () => {
                 <div className="chart-value">{new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(d.amount)}</div>
               </div>
               <div className="chart-bar-wrap">
-                <div className="chart-bar" style={{ width: `${barWidth}%`, background: d.color || 'var(--accent)' }} />
+                <div className="chart-bar" style={{ width: `${barWidth}%`, background: barColor }} />
                 <div className="chart-pct">{d.percentage || pct}%</div>
               </div>
             </div>

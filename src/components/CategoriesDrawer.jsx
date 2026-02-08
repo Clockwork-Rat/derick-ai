@@ -19,8 +19,10 @@ export default function CategoriesDrawer({
       const s = Array.isArray(savingsCategories) ? savingsCategories.slice() : []
       if (!w.includes('Other')) w.push('Other')
 
+      const wantsOrdered = [...w.filter((val) => val !== 'Other'), 'Other']
+
       setNeeds(n.map((val) => ({ id: crypto.randomUUID(), value: val })))
-      setWants(w.map((val) => ({ id: crypto.randomUUID(), value: val })))
+      setWants(wantsOrdered.map((val) => ({ id: crypto.randomUUID(), value: val })))
       setSavings(s.map((val) => ({ id: crypto.randomUUID(), value: val })))
     }
   }, [open, needsCategories, wantsCategories, savingsCategories])
@@ -33,6 +35,15 @@ export default function CategoriesDrawer({
 
   function addToList(setter) {
     setter(prev => [...prev, { id: crypto.randomUUID(), value: '' }])
+  }
+
+  function addWant() {
+    setWants(prev => {
+      const otherIndex = prev.findIndex((item) => item.value === 'Other')
+      const nextItem = { id: crypto.randomUUID(), value: '' }
+      if (otherIndex === -1) return [...prev, nextItem]
+      return [...prev.slice(0, otherIndex), nextItem, ...prev.slice(otherIndex)]
+    })
   }
 
   function removeFromList(list, setter, id) {
@@ -52,10 +63,11 @@ export default function CategoriesDrawer({
     const cleanedWants = clean(wants)
     const cleanedSavings = clean(savings)
     if (!cleanedWants.includes('Other')) cleanedWants.push('Other')
+    const wantsOrdered = [...cleanedWants.filter((val) => val !== 'Other'), 'Other']
 
     onSave({
       needs_categories: cleanedNeeds,
-      wants_categories: cleanedWants,
+      wants_categories: wantsOrdered,
       savings_categories: cleanedSavings
     })
     onClose()
@@ -111,7 +123,7 @@ export default function CategoriesDrawer({
                 ))}
               </div>
               <div style={{ marginTop: '8px' }}>
-                <button className="btn" onClick={() => addToList(setWants)}>Add Want</button>
+                <button className="btn" onClick={addWant}>Add Want</button>
               </div>
             </div>
 

@@ -1,18 +1,48 @@
 import React from 'react'
 
-export default function TargetsChart({ targets = {}, projectedIncome = 0, onEditClick = () => {}, categories = [] }) {
+export default function TargetsChart({ targets = {}, projectedIncome = 0, onEditClick = () => {}, categories = [], needsCategories = [], wantsCategories = [], savingsCategories = [] }) {
   const fallback = ['Housing', 'Food', 'Utilities', 'Transport', 'Entertainment', 'Healthcare', 'Other']
   const EXPENSE_CATS = categories.length ? categories : fallback
-  const palette = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#f97316', '#06b6d4']
+  const needsSet = new Set(needsCategories)
+  const wantsSet = new Set(wantsCategories)
+  const savingsSet = new Set(savingsCategories)
+  const NEEDS_COLOR = '#3b82f6'
+  const WANTS_COLOR = '#ef4444'
+  const SAVINGS_COLOR = '#22c55e'
+  const DEFAULT_COLOR = '#94a3b8'
 
-  const data = EXPENSE_CATS.map((cat, i) => {
+  const getCategoryColor = (cat) => {
+    if (savingsSet.has(cat)) return SAVINGS_COLOR
+    if (needsSet.has(cat)) return NEEDS_COLOR
+    if (wantsSet.has(cat)) return WANTS_COLOR
+    return DEFAULT_COLOR
+  }
+
+  const wantsWithoutOther = wantsCategories.filter((cat) => cat !== 'Other')
+  const wantsOrdered = [...wantsWithoutOther]
+  if (wantsCategories.includes('Other') || EXPENSE_CATS.includes('Other')) wantsOrdered.push('Other')
+
+  const orderedCats = []
+  const used = new Set()
+  const pushIfAvailable = (cat) => {
+    if (!EXPENSE_CATS.includes(cat) || used.has(cat)) return
+    orderedCats.push(cat)
+    used.add(cat)
+  }
+
+  needsCategories.forEach(pushIfAvailable)
+  wantsOrdered.forEach(pushIfAvailable)
+  savingsCategories.forEach(pushIfAvailable)
+  EXPENSE_CATS.forEach(pushIfAvailable)
+
+  const data = orderedCats.map((cat) => {
     const amount = targets[cat] || 0
     const pct = projectedIncome > 0 ? (amount / projectedIncome) * 100 : 0
     return {
       label: cat,
       percentage: pct,
       amount: amount,
-      color: palette[i % palette.length]
+      color: getCategoryColor(cat)
     }
   })
 
@@ -24,7 +54,7 @@ export default function TargetsChart({ targets = {}, projectedIncome = 0, onEdit
     label: 'Saved',
     percentage: saved,
     amount: savedAmount,
-    color: '#22c55e'
+    color: SAVINGS_COLOR
   })
 
   return (
@@ -46,9 +76,9 @@ export default function TargetsChart({ targets = {}, projectedIncome = 0, onEdit
               </div>
             </div>
             <div className="chart-bar-wrap">
-              <div 
-                className="chart-bar" 
-                style={{ width: `${(d.percentage / 100) * 100}%`, background: d.color }} 
+              <div
+                className="chart-bar"
+                style={{ width: `${(d.percentage / 100) * 100}%`, background: d.color }}
               />
               <div className="chart-pct"></div>
             </div>

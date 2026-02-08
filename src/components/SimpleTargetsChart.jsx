@@ -12,8 +12,8 @@ export default function SimpleTargetsChart({ targets = {}, projectedIncome = 0, 
   const savedAmount = Math.max(0, projectedIncome - allocatedAmount) + savings_amount
 
   const data = [
-    { label: 'Needs', amount: needs_amount, percentage: projectedIncome > 0 ? (needs_amount / projectedIncome) * 100 : 0, color: '#ef4444' },
-    { label: 'Wants', amount: wants_amount, percentage: projectedIncome > 0 ? (wants_amount / projectedIncome) * 100 : 0, color: '#f59e0b' },
+    { label: 'Needs', amount: needs_amount, percentage: projectedIncome > 0 ? (needs_amount / projectedIncome) * 100 : 0, color: '#3b82f6' },
+    { label: 'Wants', amount: wants_amount, percentage: projectedIncome > 0 ? (wants_amount / projectedIncome) * 100 : 0, color: '#ef4444' },
     { label: 'Savings', amount: savedAmount, percentage: projectedIncome > 0 ? (savedAmount / projectedIncome) * 100 : 0, color: '#22c55e' }
   ]
 
@@ -36,9 +36,9 @@ export default function SimpleTargetsChart({ targets = {}, projectedIncome = 0, 
               </div>
             </div>
             <div className="chart-bar-wrap">
-              <div 
-                className="chart-bar" 
-                style={{ width: `${d.percentage}%`, background: d.color }} 
+              <div
+                className="chart-bar"
+                style={{ width: `${d.percentage}%`, background: d.color }}
               />
               <div className="chart-pct"></div>
             </div>
