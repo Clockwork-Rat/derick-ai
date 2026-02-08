@@ -1,0 +1,371 @@
+import React, { useState, useEffect } from 'react'
+import Header from './components/Header'
+import Dashboard from './components/Dashboard'
+import MonthlyIncome from './components/MonthlyIncome'
+import ExpenditureChart from './components/ExpenditureChart'
+import TargetsChart from './components/TargetsChart'
+import SimpleTargetsChart from './components/SimpleTargetsChart'
+import SimpleBudgetChart from './components/SimpleBudgetChart'
+import TransactionsDrawer from './components/TransactionsDrawer'
+import ViewTransactionsDrawer from './components/ViewTransactionsDrawer'
+import TargetsDrawer from './components/TargetsDrawer'
+import ProjectedIncomeDrawer from './components/ProjectedIncomeDrawer'
+import CategoriesDrawer from './components/CategoriesDrawer'
+import AiAdvisorDrawer from './components/AiAdvisorDrawer'
+import appConfig from '../config.json'
+
+// backend base URL (Vite env var: VITE_API_BASE). Defaults to localhost:5000
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000'
+
+export default function App() {
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [transactionsDrawerOpen, setTransactionsDrawerOpen] = useState(false)
+  const [viewTransactionsOpen, setViewTransactionsOpen] = useState(false)
+  const [targetsDrawerOpen, setTargetsDrawerOpen] = useState(false)
+  const [categoriesDrawerOpen, setCategoriesDrawerOpen] = useState(false)
+  const [advisorDrawerOpen, setAdvisorDrawerOpen] = useState(false)
+  const [projectedIncomeDrawerOpen, setProjectedIncomeDrawerOpen] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState(1)
+  const [selectedMonth, setSelectedMonth] = useState(new Date())
+  const [transactions, setTransactions] = useState([])
+  const [txLoading, setTxLoading] = useState(false)
+  const [txError, setTxError] = useState(null)
+  const [targets, setTargets] = useState({
+    // amounts in dollars (based on projected income default)
+    'Housing': 1500,
+    'Food': 600,
+    'Utilities': 400,
+    'Transport': 750,
+    'Entertainment': 250,
+    'Healthcare': 250,
+    'Other': 250
+  })
+  const [projectedIncome, setProjectedIncome] = useState(5000)
+  const [expenseCategories, setExpenseCategories] = useState([
+    'Housing', 'Food', 'Utilities', 'Transport', 'Entertainment', 'Healthcare', 'Other'
+  ])
+  const [needsCategories, setNeedsCategories] = useState(['Housing', 'Food', 'Utilities', 'Healthcare'])
+  const [wantsCategories, setWantsCategories] = useState(['Transport', 'Entertainment', 'Other'])
+  const [savingsCategories, setSavingsCategories] = useState([])
+  const [simpleView, setSimpleView] = useState(false)
+
+  useEffect(() => {
+    async function ensureConfiguredUser() {
+      const cfgUser = appConfig && appConfig.user
+      if (!cfgUser) return
+
+      try {
+        const res = await fetch(`${API_BASE}/api/users`)
+        if (res.ok) {
+          const users = await res.json()
+          const match = users.find(u => u.username === cfgUser.username || u.email === cfgUser.email)
+          if (match) {
+            setSelectedUserId(match.id)
+            return
+          }
+        }
+
+        // create user if not found
+        const createRes = await fetch(`${API_BASE}/api/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: cfgUser.username, email: cfgUser.email })
+        })
+        if (createRes.ok) {
+          const created = await createRes.json()
+          if (created && created.id) setSelectedUserId(created.id)
+        }
+      } catch (err) {
+        console.error('Error ensuring configured user:', err)
+      }
+    }
+
+    ensureConfiguredUser()
+  }, [])
+
+  useEffect(() => {
+    async function loadCategories() {
+      if (!selectedUserId) return
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${selectedUserId}/categories`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (Array.isArray(data.categories) && data.categories.length) {
+          setExpenseCategories(data.categories)
+        }
+        if (Array.isArray(data.needs_categories)) setNeedsCategories(data.needs_categories)
+        if (Array.isArray(data.wants_categories)) setWantsCategories(data.wants_categories)
+        if (Array.isArray(data.savings_categories)) setSavingsCategories(data.savings_categories)
+      } catch (err) {
+        console.error('Failed to load categories:', err)
+      }
+    }
+
+    loadCategories()
+  }, [selectedUserId])
+
+  function handleAddTransaction(data){
+    // if backend returned created transaction object, append to state
+    console.log('New transaction', data)
+    if (data && data.id) {
+      setTransactions(prev => [...prev, data])
+    }
+  }
+
+  function handleDeleteTransaction(transactionId) {
+    setTransactions(prev => prev.filter(t => t.id !== transactionId))
+  }
+
+  useEffect(() => {
+    async function loadTransactions() {
+      if (!selectedUserId) return
+      setTxLoading(true)
+      setTxError(null)
+      try {
+        const res = await fetch(`${API_BASE}/api/users/${selectedUserId}/transactions`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        setTransactions(Array.isArray(data) ? data : [])
+      } catch (err) {
+        console.error('Failed to load transactions:', err)
+        setTxError(err.message)
+      } finally {
+        setTxLoading(false)
+      }
+    }
+
+    loadTransactions()
+  }, [selectedUserId])
+
+  // compute monthly totals
+  const monthTx = transactions.filter(t => {
+    const d = new Date(t.date)
+    return d.getFullYear() === selectedMonth.getFullYear() && d.getMonth() === selectedMonth.getMonth()
+  })
+  const monthlyIncome = monthTx
+    .filter(t => t.transaction_type === 'income')
+    .reduce((s, t) => s + (t.amount || 0), 0)
+  const EXPENSE_CATS = expenseCategories && expenseCategories.length
+    ? expenseCategories
+    : ['Housing', 'Food', 'Utilities', 'Transport', 'Entertainment', 'Healthcare', 'Other']
+  const expensesByCategory = {}
+  EXPENSE_CATS.forEach(cat => { expensesByCategory[cat] = 0 })
+  monthTx
+    .filter(t => t.transaction_type === 'expense')
+    .forEach(e => {
+      const key = e.category && EXPENSE_CATS.includes(e.category) ? e.category : 'Other'
+      expensesByCategory[key] += Number(e.amount) || 0
+    })
+
+  const topExpenses = monthTx
+    .filter(t => t.transaction_type === 'expense')
+    .slice()
+    .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+    .slice(0, 3)
+
+  const topTransactions = monthTx
+    .slice()
+    .sort((a, b) => (Math.abs(b.amount || 0) - Math.abs(a.amount || 0)))
+    .slice(0, 3)
+
+  const topIncome = monthTx
+    .filter(t => t.transaction_type === 'income')
+    .slice()
+    .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+    .slice(0, 3)
+
+  const selectedYear = selectedMonth.getFullYear()
+  const selectedMonthIndex = selectedMonth.getMonth()
+
+  function updateMonthYear(monthIndex, year) {
+    const next = new Date(selectedMonth)
+    next.setFullYear(year)
+    next.setMonth(monthIndex)
+    setSelectedMonth(next)
+  }
+
+  return (
+    <div className="app">
+      <Header/>
+      <main>
+        <Dashboard
+          topExpenses={topExpenses}
+          topTransactions={topTransactions}
+          topIncome={topIncome}
+          selectedMonthIndex={selectedMonthIndex}
+          selectedYear={selectedYear}
+          onChangeMonth={(monthIndex) => updateMonthYear(monthIndex, selectedYear)}
+          onChangeYear={(year) => updateMonthYear(selectedMonthIndex, year)}
+        />
+        
+        {/* View toggle */}
+        <div style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
+          <button 
+            className={`btn ${!simpleView ? 'btn-primary' : ''}`}
+            onClick={() => setSimpleView(false)}
+          >
+            Detailed View
+          </button>
+          <button 
+            className={`btn ${simpleView ? 'btn-primary' : ''}`}
+            onClick={() => setSimpleView(true)}
+          >
+            Simple View
+          </button>
+        </div>
+
+        <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: 16}}>
+          <MonthlyIncome
+            month={selectedMonth}
+            amount={monthlyIncome}
+            projectedAmount={projectedIncome}
+            onEditProjected={() => setProjectedIncomeDrawerOpen(true)}
+          />
+        </div>
+
+        {/* Actual vs Target charts side by side */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+          {simpleView ? (
+            <SimpleBudgetChart
+              income={monthlyIncome}
+              expenses={expensesByCategory}
+              needsCategories={needsCategories}
+              wantsCategories={wantsCategories}
+              savingsCategories={savingsCategories}
+            />
+          ) : (
+            <ExpenditureChart onEditCategories={() => setCategoriesDrawerOpen(true)} data={(() => {
+              const palette = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#f97316', '#06b6d4']
+
+              // total expenses and saved amount
+              const totalExpenses = Object.values(expensesByCategory).reduce((s, a) => s + a, 0)
+              const saved = Math.max(0, monthlyIncome - totalExpenses)
+
+              // build chart data with percentages based on income
+              const divisor = monthlyIncome > 0 ? monthlyIncome : 1
+              const result = EXPENSE_CATS.map((cat, i) => ({
+                label: cat,
+                amount: expensesByCategory[cat],
+                percentage: ((expensesByCategory[cat] / divisor) * 100).toFixed(1),
+                color: palette[i % palette.length]
+              }))
+              
+              // add saved row
+              result.push({
+                label: 'Saved',
+                amount: saved,
+                percentage: ((saved / divisor) * 100).toFixed(1),
+                color: '#22c55e'
+              })
+
+              return result
+            })()} />
+          )}
+
+          {simpleView ? (
+            <SimpleTargetsChart
+              targets={targets}
+              projectedIncome={projectedIncome}
+              needsCategories={needsCategories}
+              wantsCategories={wantsCategories}
+              savingsCategories={savingsCategories}
+              onEditClick={() => setTargetsDrawerOpen(true)}
+            />
+          ) : (
+            <TargetsChart targets={targets} projectedIncome={projectedIncome} categories={EXPENSE_CATS} onEditClick={() => setTargetsDrawerOpen(true)} />
+          )}
+        </div>
+
+        <button 
+          className="btn btn-primary" 
+          style={{marginTop: 16, marginRight: 8}}
+          onClick={() => setTransactionsDrawerOpen(true)}
+        >
+          Add Transaction
+        </button>
+        <button 
+          className="btn" 
+          style={{marginTop: 16}}
+          onClick={() => setViewTransactionsOpen(true)}
+        >
+          View Transactions
+        </button>
+        <button 
+          className="btn" 
+          style={{marginTop: 16, marginLeft: 8}}
+          onClick={() => setAdvisorDrawerOpen(true)}
+        >
+          Ask Budget Advisor
+        </button>
+
+      </main>
+      <TransactionsDrawer open={transactionsDrawerOpen} onClose={() => setTransactionsDrawerOpen(false)} onSubmit={handleAddTransaction} userId={selectedUserId} expenseCategories={EXPENSE_CATS} />
+      <ViewTransactionsDrawer 
+        open={viewTransactionsOpen} 
+        onClose={() => setViewTransactionsOpen(false)} 
+        userId={selectedUserId}
+        month={selectedMonth}
+        onDelete={handleDeleteTransaction}
+      />
+      <TargetsDrawer 
+        open={targetsDrawerOpen}
+        onClose={() => setTargetsDrawerOpen(false)}
+        targets={targets}
+        projectedIncome={projectedIncome}
+        categories={EXPENSE_CATS}
+        onSave={(newTargets) => setTargets(newTargets)}
+      />
+      <CategoriesDrawer
+        open={categoriesDrawerOpen}
+        onClose={() => setCategoriesDrawerOpen(false)}
+        needsCategories={needsCategories}
+        wantsCategories={wantsCategories}
+        savingsCategories={savingsCategories}
+        onSave={async ({ needs_categories, wants_categories, savings_categories }) => {
+          const union = Array.from(new Set([...(needs_categories || []), ...(wants_categories || []), ...(savings_categories || [])]))
+          setExpenseCategories(union)
+          setNeedsCategories(needs_categories || [])
+          setWantsCategories(wants_categories || [])
+          setSavingsCategories(savings_categories || [])
+
+          // keep targets in sync with categories
+          setTargets(prev => {
+            const next = {}
+            union.forEach(cat => { next[cat] = prev[cat] || 0 })
+            return next
+          })
+
+          if (selectedUserId) {
+            try {
+              await fetch(`${API_BASE}/api/users/${selectedUserId}/categories`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  needs_categories,
+                  wants_categories,
+                  savings_categories
+                })
+              })
+            } catch (err) {
+              console.error('Failed to save categories:', err)
+            }
+          }
+        }}
+      />
+      <ProjectedIncomeDrawer
+        open={projectedIncomeDrawerOpen}
+        onClose={() => setProjectedIncomeDrawerOpen(false)}
+        projectedIncome={projectedIncome}
+        onSave={(value) => setProjectedIncome(value)}
+      />
+      <AiAdvisorDrawer
+        open={advisorDrawerOpen}
+        onClose={() => setAdvisorDrawerOpen(false)}
+        projectedIncome={projectedIncome}
+        currentMonthIncomeToDate={monthlyIncome}
+        expensesByCategory={expensesByCategory}
+        targets={targets}
+      />
+    </div>
+  )
+}
