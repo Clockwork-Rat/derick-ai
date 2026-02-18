@@ -37,25 +37,24 @@ export default function TargetsChart({ targets = {}, projectedIncome = 0, onEdit
 
   const data = orderedCats.map((cat) => {
     const amount = targets[cat] || 0
-    const pct = projectedIncome > 0 ? (amount / projectedIncome) * 100 : 0
     return {
       label: cat,
-      percentage: pct,
       amount: amount,
       color: getCategoryColor(cat)
     }
   })
 
-  // Add saved percentage
+  // Add saved row
   const allocatedAmount = Object.values(targets).reduce((s, v) => s + (v || 0), 0)
   const savedAmount = Math.max(0, projectedIncome - allocatedAmount)
-  const saved = projectedIncome > 0 ? (savedAmount / projectedIncome) * 100 : 0
   data.push({
     label: 'Saved',
-    percentage: saved,
     amount: savedAmount,
     color: SAVINGS_COLOR
   })
+
+  // Calculate max for scaling
+  const maxAmount = Math.max(...data.map(d => d.amount || 0))
 
   return (
     <section className="card expenditure-chart">
@@ -67,27 +66,31 @@ export default function TargetsChart({ targets = {}, projectedIncome = 0, onEdit
       </div>
 
       <div className="chart-list">
-        {data.map((d, i) => (
-          <div className="chart-row" key={i}>
-            <div className="chart-meta">
-              <div className="chart-label">{d.label}</div>
-              <div className="chart-value">
-                {d.percentage.toFixed(1)}% ({new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(d.amount)})
+        {data.map((d, i) => {
+          const pct = projectedIncome > 0 ? ((d.amount / projectedIncome) * 100).toFixed(1) : 0
+          const barWidth = maxAmount > 0 ? Math.round((d.amount / maxAmount) * 100) : 0
+          return (
+            <div className="chart-row" key={i}>
+              <div className="chart-meta">
+                <div className="chart-label">{d.label}</div>
+                <div className="chart-value">
+                  {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(d.amount)}
+                </div>
+              </div>
+              <div className="chart-bar-wrap">
+                <div
+                  className="chart-bar"
+                  style={{ width: `${barWidth}%`, background: d.color }}
+                />
+                <div className="chart-pct">{pct}%</div>
               </div>
             </div>
-            <div className="chart-bar-wrap">
-              <div
-                className="chart-bar"
-                style={{ width: `${(d.percentage / 100) * 100}%`, background: d.color }}
-              />
-              <div className="chart-pct"></div>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e5e7eb', fontSize: '12px', opacity: 0.6 }}>
-        Total allocated: {projectedIncome > 0 ? ((allocatedAmount / projectedIncome) * 100).toFixed(1) : '0.0'}%
+        Total target: {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(allocatedAmount + savedAmount)}
       </div>
     </section>
   )

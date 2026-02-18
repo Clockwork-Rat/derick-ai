@@ -28,9 +28,11 @@ def seed_db():
         
         print("Seeding database with sample data...")
         
-        # Create sample users
+        # Create sample users with passwords
         user1 = User(username='john_doe', email='john@example.com')
+        user1.set_password('password123')  # Default password for demo
         user2 = User(username='jane_smith', email='jane@example.com')
+        user2.set_password('password123')  # Default password for demo
         
         db.session.add(user1)
         db.session.add(user2)
@@ -116,6 +118,39 @@ def reset_db():
         db.create_all()
         print("✓ Tables recreated")
 
+def migrate_add_password():
+    """Migrate existing users to add password_hash field"""
+    app = create_app()
+    
+    with app.app_context():
+        print("Migrating users to add password field...")
+        
+        # Check if password_hash column exists
+        try:
+            users = User.query.all()
+            if not users:
+                print("No users to migrate")
+                return
+            
+            migrated_count = 0
+            for user in users:
+                # Check if user already has a password_hash
+                if not user.password_hash:
+                    # Set a default password (users will need to change it)
+                    user.set_password('changeme123')
+                    migrated_count += 1
+            
+            if migrated_count > 0:
+                db.session.commit()
+                print(f"✓ Migrated {migrated_count} users with default password 'changeme123'")
+                print("  Users should change their password after first login")
+            else:
+                print("✓ All users already have passwords set")
+        except Exception as e:
+            print(f"Migration failed: {e}")
+            print("You may need to run 'reset' to drop and recreate all tables")
+            db.session.rollback()
+
 if __name__ == '__main__':
     import sys
     
@@ -130,8 +165,10 @@ if __name__ == '__main__':
         elif command == 'all':
             init_db()
             seed_db()
+        elif command == 'migrate':
+            migrate_add_password()
         else:
-            print("Unknown command. Use: init, seed, reset, or all")
+            print("Unknown command. Use: init, seed, reset, migrate, or all")
     else:
         # Default: initialize and seed
         init_db()

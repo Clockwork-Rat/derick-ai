@@ -20,7 +20,18 @@ export default function MonthlyIncome({ amount = 0, projectedAmount = 0, month, 
         <div className="mi-month">{formatMonth(month)}</div>
       </div>
       <div className="mi-amount">{formatted}</div>
-      <div style={{ marginTop: '6px', fontSize: '12px', opacity: 0.7 }}>
+      <div 
+        style={{ 
+          marginTop: '6px', 
+          fontSize: '12px', 
+          opacity: 0.7,
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          textDecorationStyle: 'dotted'
+        }}
+        onClick={onEditProjected}
+        title="Click to edit projected income"
+      >
         Projected: {formattedProjected}
       </div>
     </div>

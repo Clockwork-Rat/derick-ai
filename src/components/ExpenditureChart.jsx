@@ -74,7 +74,7 @@ export default function ExpenditureChart({ data = [], onEditCategories = () => {
               </div>
               <div className="chart-bar-wrap">
                 <div className="chart-bar" style={{ width: `${barWidth}%`, background: barColor }} />
-                <div className="chart-pct">{d.percentage || pct}%</div>
+                <div className="chart-pct">{pct}%</div>
               </div>
             </div>
           )

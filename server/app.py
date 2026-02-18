@@ -101,14 +101,14 @@ def register_routes(app):
 
     @app.route('/api/users', methods=['POST'])
     def create_user():
-        """Create a new user"""
+        """Create a new user (deprecated - use /api/register instead)"""
         data = request.get_json()
 
         if not data:
             return jsonify({'error': 'No data provided'}), 400
 
-        if not data.get('username') or not data.get('email'):
-            return jsonify({'error': 'Username and email are required'}), 400
+        if not data.get('username') or not data.get('email') or not data.get('password'):
+            return jsonify({'error': 'Username, email, and password are required'}), 400
 
         # Check if user already exists
         if User.query.filter_by(username=data['username']).first():
@@ -119,6 +119,74 @@ def register_routes(app):
 
         try:
             user = User(username=data['username'], email=data['email'])
+            user.set_password(data['password'])
+            db.session.add(user)
+            db.session.commit()
+            # initialize user config with default categories
+            config = UserConfig(
+                user_id=user.id,
+                categories=DEFAULT_CATEGORIES,
+                needs_categories=DEFAULT_NEEDS,
+                wants_categories=DEFAULT_WANTS,
+                savings_categories=DEFAULT_SAVINGS
+            )
+            db.session.add(config)
+            db.session.commit()
+            return jsonify(user.to_dict()), 201
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/login', methods=['POST'])
+    def login():
+        """Authenticate a user with username and password"""
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+
+        user = User.query.filter_by(username=username).first()
+
+        if not user or not user.check_password(password):
+            return jsonify({'error': 'Invalid username or password'}), 401
+
+        return jsonify(user.to_dict()), 200
+
+    @app.route('/api/register', methods=['POST'])
+    def register():
+        """Register a new user"""
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+
+        if not username or not email or not password:
+            return jsonify({'error': 'Username, email, and password are required'}), 400
+
+        # Validate password length
+        if len(password) < 4:
+            return jsonify({'error': 'Password must be at least 4 characters'}), 400
+
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            return jsonify({'error': 'Username already exists'}), 409
+
+        if User.query.filter_by(email=email).first():
+            return jsonify({'error': 'Email already exists'}), 409
+
+        try:
+            user = User(username=username, email=email)
+            user.set_password(password)
             db.session.add(user)
             db.session.commit()
             # initialize user config with default categories
@@ -163,7 +231,8 @@ def register_routes(app):
             'categories': union_categories(needs, wants, savings),
             'needs_categories': needs,
             'wants_categories': wants,
-            'savings_categories': savings
+            'savings_categories': savings,
+            'projected_income': config.projected_income or 5000.0
         }), 200
 
     @app.route('/api/users/<int:user_id>/categories', methods=['PUT'])
@@ -179,6 +248,7 @@ def register_routes(app):
             data.get('savings_categories', [])
         )
         categories = union_categories(needs, wants, savings)
+        projected_income = data.get('projected_income', 5000.0)
 
         config = UserConfig.query.filter_by(user_id=user_id).first()
         if not config:
@@ -187,7 +257,8 @@ def register_routes(app):
                 categories=categories,
                 needs_categories=needs,
                 wants_categories=wants,
-                savings_categories=savings
+                savings_categories=savings,
+                projected_income=projected_income
             )
             db.session.add(config)
         else:
@@ -195,13 +266,15 @@ def register_routes(app):
             config.needs_categories = needs
             config.wants_categories = wants
             config.savings_categories = savings
+            config.projected_income = projected_income
 
         db.session.commit()
         return jsonify({
             'categories': categories,
             'needs_categories': needs,
             'wants_categories': wants,
-            'savings_categories': savings
+            'savings_categories': savings,
+            'projected_income': projected_income
         }), 200
 
     @app.route('/api/users/<int:user_id>/transactions', methods=['GET'])

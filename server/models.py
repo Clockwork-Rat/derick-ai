@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
 
@@ -11,9 +12,18 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     transactions = db.relationship('Transaction', backref='user', lazy=True, cascade='all, delete-orphan')
+    
+    def set_password(self, password):
+        """Hash and set the user's password"""
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        """Check if the provided password matches the hash"""
+        return check_password_hash(self.password_hash, password)
     
     def __repr__(self):
         return f'<User {self.username}>'
@@ -67,6 +77,7 @@ class UserConfig(db.Model):
     needs_categories = db.Column(db.JSON, nullable=False, default=list)
     wants_categories = db.Column(db.JSON, nullable=False, default=list)
     savings_categories = db.Column(db.JSON, nullable=False, default=list)
+    projected_income = db.Column(db.Float, nullable=False, default=5000.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -78,5 +89,6 @@ class UserConfig(db.Model):
             'categories': self.categories or [],
             'needs_categories': self.needs_categories or [],
             'wants_categories': self.wants_categories or [],
-            'savings_categories': self.savings_categories or []
+            'savings_categories': self.savings_categories or [],
+            'projected_income': self.projected_income or 5000.0
         }

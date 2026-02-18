@@ -28,13 +28,16 @@ export default function App() {
   const [projectedIncomeDrawerOpen, setProjectedIncomeDrawerOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState(() => {
     const stored = localStorage.getItem('selectedUserId')
-    return stored ? Number(stored) : 1
+    return stored ? Number(stored) : null
   })
   const [loginUsername, setLoginUsername] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError] = useState('')
+  const [authMode, setAuthMode] = useState('login') // 'login' or 'register'
+  const [registerEmail, setRegisterEmail] = useState('')
   const [currentUsername, setCurrentUsername] = useState(() => {
-    return localStorage.getItem('currentUsername') || 'User'
+    return localStorage.getItem('currentUsername') || ''
   })
   const [selectedMonth, setSelectedMonth] = useState(new Date())
   const [transactions, setTransactions] = useState([])
@@ -58,48 +61,20 @@ export default function App() {
   const [wantsCategories, setWantsCategories] = useState(['Transport', 'Entertainment', 'Other'])
   const [savingsCategories, setSavingsCategories] = useState([])
   const [simpleView, setSimpleView] = useState(false)
-  const [activePage, setActivePage] = useState('overview')
+  const [activePage, setActivePage] = useState('login')
   const [reviewYear, setReviewYear] = useState(new Date().getFullYear())
 
-  useEffect(() => {
-    async function ensureConfiguredUser() {
-      const storedUserId = localStorage.getItem('selectedUserId')
-      if (storedUserId) return
-      const cfgUser = appConfig && appConfig.user
-      if (!cfgUser) return
+  // Remove auto-user creation logic
+  // User must login or register first
 
-      try {
-        const res = await fetch(`${API_BASE}/api/users`)
-        if (res.ok) {
-          const users = await res.json()
-          const match = users.find(u => u.username === cfgUser.username || u.email === cfgUser.email)
-          if (match) {
-            setSelectedUserId(match.id)
-            setCurrentUsername(match.username || 'User')
-            return
-          }
-        }
-
-        // create user if not found
-        const createRes = await fetch(`${API_BASE}/api/users`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: cfgUser.username, email: cfgUser.email })
-        })
-        if (createRes.ok) {
-          const created = await createRes.json()
-          if (created && created.id) {
-            setSelectedUserId(created.id)
-            setCurrentUsername(created.username || 'User')
-          }
-        }
-      } catch (err) {
-        console.error('Error ensuring configured user:', err)
-      }
-    }
-
-    ensureConfiguredUser()
-  }, [])
+  function handleLogout() {
+    setSelectedUserId(null)
+    setCurrentUsername('')
+    setActivePage('login')
+    localStorage.removeItem('selectedUserId')
+    localStorage.removeItem('currentUsername')
+    setTransactions([])
+  }
 
   useEffect(() => {
     if (selectedUserId) {
@@ -112,37 +87,82 @@ export default function App() {
 
   async function handleLogin() {
     const username = loginUsername.trim()
-    if (!username) return
+    const password = loginPassword.trim()
+    if (!username || !password) {
+      setLoginError('Username and password are required')
+      return
+    }
     setLoginLoading(true)
     setLoginError('')
 
     try {
-      const res = await fetch(`${API_BASE}/api/users`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const users = await res.json()
-      const match = users.find(u => u.username === username)
-      if (match) {
-        setSelectedUserId(match.id)
-        setCurrentUsername(match.username || 'User')
-        setActivePage('overview')
-        return
-      }
-
-      const email = `${username}_${Date.now()}@example.com`
-      const createRes = await fetch(`${API_BASE}/api/users`, {
+      const res = await fetch(`${API_BASE}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email })
+        body: JSON.stringify({ username, password })
       })
-      if (!createRes.ok) throw new Error(`HTTP ${createRes.status}`)
-      const created = await createRes.json()
-      if (created && created.id) {
-        setSelectedUserId(created.id)
-        setCurrentUsername(created.username || 'User')
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Login failed')
+      }
+
+      const user = await res.json()
+      if (user && user.id) {
+        setSelectedUserId(user.id)
+        setCurrentUsername(user.username || 'User')
         setActivePage('overview')
+        setLoginUsername('')
+        setLoginPassword('')
       }
     } catch (err) {
-      setLoginError('Unable to sign in right now.')
+      setLoginError(err.message || 'Unable to sign in right now.')
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  async function handleRegister() {
+    const username = loginUsername.trim()
+    const email = registerEmail.trim()
+    const password = loginPassword.trim()
+
+    if (!username || !email || !password) {
+      setLoginError('All fields are required')
+      return
+    }
+
+    if (password.length < 4) {
+      setLoginError('Password must be at least 4 characters')
+      return
+    }
+
+    setLoginLoading(true)
+    setLoginError('')
+
+    try {
+      const res = await fetch(`${API_BASE}/api/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password })
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Registration failed')
+      }
+
+      const user = await res.json()
+      if (user && user.id) {
+        setSelectedUserId(user.id)
+        setCurrentUsername(user.username || 'User')
+        setActivePage('overview')
+        setLoginUsername('')
+        setLoginPassword('')
+        setRegisterEmail('')
+      }
+    } catch (err) {
+      setLoginError(err.message || 'Unable to register right now.')
     } finally {
       setLoginLoading(false)
     }
@@ -178,6 +198,7 @@ export default function App() {
         if (Array.isArray(data.needs_categories)) setNeedsCategories(data.needs_categories)
         if (Array.isArray(data.wants_categories)) setWantsCategories(data.wants_categories)
         if (Array.isArray(data.savings_categories)) setSavingsCategories(data.savings_categories)
+        if (typeof data.projected_income === 'number') setProjectedIncome(data.projected_income)
       } catch (err) {
         console.error('Failed to load categories:', err)
       }
@@ -282,46 +303,111 @@ export default function App() {
       <Header
         currentUsername={currentUsername}
         onOpenLogin={() => setActivePage('login')}
+        onLogout={handleLogout}
       />
       <main>
-        <nav style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <button
-            className={`btn ${activePage === 'overview' ? 'btn-primary' : ''}`}
-            onClick={() => setActivePage('overview')}
-          >
-            Overview
-          </button>
-          <button
-            className={`btn ${activePage === 'year' ? 'btn-primary' : ''}`}
-            onClick={() => setActivePage('year')}
-          >
-            Year Breakdown
-          </button>
-        </nav>
+        {selectedUserId ? (
+          <>
+            <nav style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button
+                className={`btn ${activePage === 'overview' ? 'btn-primary' : ''}`}
+                onClick={() => setActivePage('overview')}
+              >
+                Overview
+              </button>
+              <button
+                className={`btn ${activePage === 'year' ? 'btn-primary' : ''}`}
+                onClick={() => setActivePage('year')}
+              >
+                Year Breakdown
+              </button>
+            </nav>
+          </>
+        ) : null}
 
         {activePage === 'login' ? (
           <section className="card" style={{ maxWidth: '520px' }}>
-            <h2>Sign in</h2>
-            <p className="small">Enter your username to continue.</p>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+            <h2>{authMode === 'login' ? 'Sign in' : 'Create Account'}</h2>
+            <p className="small">
+              {authMode === 'login'
+                ? 'Enter your username and password to continue.'
+                : 'Fill in your details to create a new account.'}
+            </p>
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <input
                 type="text"
                 value={loginUsername}
                 onChange={(e) => setLoginUsername(e.target.value)}
                 placeholder="Username"
                 aria-label="Username"
-                style={{ flex: 1 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleLogin()
+                  if (e.key === 'Enter' && authMode === 'login') handleLogin()
+                  if (e.key === 'Enter' && authMode === 'register') handleRegister()
                 }}
               />
-              <button className="btn btn-primary" onClick={handleLogin} disabled={loginLoading || !loginUsername.trim()}>
-                {loginLoading ? 'Signing in…' : 'Login'}
+              {authMode === 'register' && (
+                <input
+                  type="email"
+                  value={registerEmail}
+                  onChange={(e) => setRegisterEmail(e.target.value)}
+                  placeholder="Email"
+                  aria-label="Email"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRegister()
+                  }}
+                />
+              )}
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Password"
+                aria-label="Password"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && authMode === 'login') handleLogin()
+                  if (e.key === 'Enter' && authMode === 'register') handleRegister()
+                }}
+              />
+              <button
+                className="btn btn-primary"
+                onClick={authMode === 'login' ? handleLogin : handleRegister}
+                disabled={
+                  loginLoading ||
+                  !loginUsername.trim() ||
+                  !loginPassword.trim() ||
+                  (authMode === 'register' && !registerEmail.trim())
+                }
+              >
+                {loginLoading
+                  ? authMode === 'login'
+                    ? 'Signing in…'
+                    : 'Creating account…'
+                  : authMode === 'login'
+                  ? 'Login'
+                  : 'Register'}
               </button>
             </div>
-            {loginError ? <div className="small" style={{ color: '#ef4444', marginTop: '8px' }}>{loginError}</div> : null}
+            {loginError ? (
+              <div className="small" style={{ color: '#ef4444', marginTop: '8px' }}>
+                {loginError}
+              </div>
+            ) : null}
+            <div style={{ marginTop: '16px', textAlign: 'center' }}>
+              <button
+                className="btn"
+                style={{ fontSize: '14px' }}
+                onClick={() => {
+                  setAuthMode(authMode === 'login' ? 'register' : 'login')
+                  setLoginError('')
+                }}
+              >
+                {authMode === 'login'
+                  ? 'Need an account? Register here'
+                  : 'Already have an account? Login here'}
+              </button>
+            </div>
           </section>
-        ) : activePage === 'overview' ? (
+        ) : activePage === 'overview' && selectedUserId ? (
           <>
         <Dashboard
           topExpenses={topExpenses}
@@ -462,7 +548,7 @@ export default function App() {
           Ask Budget Advisor
         </button>
           </>
-        ) : (
+        ) : selectedUserId ? (
           <YearInReview
             transactions={transactions}
             year={reviewYear}
@@ -473,7 +559,7 @@ export default function App() {
               setActivePage('overview')
             }}
           />
-        )}
+        ) : null}
 
       </main>
       <TransactionsDrawer
@@ -540,7 +626,25 @@ export default function App() {
         open={projectedIncomeDrawerOpen}
         onClose={() => setProjectedIncomeDrawerOpen(false)}
         projectedIncome={projectedIncome}
-        onSave={(value) => setProjectedIncome(value)}
+        onSave={async (value) => {
+          setProjectedIncome(value)
+          if (selectedUserId) {
+            try {
+              await fetch(`${API_BASE}/api/users/${selectedUserId}/categories`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  needs_categories: needsCategories,
+                  wants_categories: wantsCategories,
+                  savings_categories: savingsCategories,
+                  projected_income: value
+                })
+              })
+            } catch (err) {
+              console.error('Failed to save projected income:', err)
+            }
+          }
+        }}
       />
       <AiAdvisorDrawer
         open={advisorDrawerOpen}
